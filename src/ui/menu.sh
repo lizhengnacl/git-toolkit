@@ -76,6 +76,8 @@ show_account_menu() {
   echo "3. 切换账号"
   echo "4. 删除账号"
   echo "5. 查看当前账号"
+  echo "6. 安装/管理 cd 钩子"
+  echo "7. 查看 SSH 配置"
   echo "0. 返回主菜单"
   echo "================================"
 }

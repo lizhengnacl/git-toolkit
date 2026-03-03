@@ -25,7 +25,12 @@ save_account_config() {
   local user_name="$2"
   local user_email="$3"
   local ssh_key_path="${4:-}"
-  local -a domains=("${@:5}")
+  local -a domains=()
+  
+  if [[ $# -gt 4 ]]; then
+    shift 4
+    domains=("$@")
+  fi
 
   mkdir -p "$ACCOUNTS_DIR"
 
@@ -74,4 +79,58 @@ save_alias_config() {
   mkdir -p "$GIT_TOOLKIT_DIR"
   echo "$alias_content" > "$GIT_TOOLKIT_DIR/aliases"
   log_info "Saved alias config"
+}
+
+load_all_accounts() {
+  local result_var="$1"
+  
+  if [[ ! -d "$ACCOUNTS_DIR" ]]; then
+    eval "$result_var=()"
+    return 0
+  fi
+  
+  local -a accounts=()
+  for account_file in "$ACCOUNTS_DIR"/*.conf; do
+    if [[ -f "$account_file" ]]; then
+      local account_name=$(basename "$account_file" .conf)
+      accounts+=("$account_name")
+    fi
+  done
+  
+  if [[ ${#accounts[@]} -gt 0 ]]; then
+    eval "$result_var=(\"\${accounts[@]}\")"
+  else
+    eval "$result_var=()"
+  fi
+}
+
+build_domain_account_map() {
+  local result_var="$1"
+  
+  if [[ ! -d "$ACCOUNTS_DIR" ]]; then
+    eval "$result_var=()"
+    return 0
+  fi
+  
+  declare -A temp_map
+  
+  for account_file in "$ACCOUNTS_DIR"/*.conf; do
+    if [[ -f "$account_file" ]]; then
+      local account_name=$(basename "$account_file" .conf)
+      source "$account_file"
+      
+      if [[ -n "${DOMAINS:-}" && ${#DOMAINS[@]} -gt 0 ]]; then
+        for domain in "${DOMAINS[@]}"; do
+          temp_map["$domain"]="$account_name"
+        done
+      fi
+      
+      unset DOMAINS 2>/dev/null || true
+    fi
+  done
+  
+  eval "$result_var=()"
+  for key in "${!temp_map[@]}"; do
+    eval "$result_var[\"$key\"]=\"${temp_map[$key]}\""
+  done
 }

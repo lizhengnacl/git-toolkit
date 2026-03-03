@@ -114,6 +114,46 @@ test_validate_path_unsafe_absolute() {
   fi
 }
 
+test_validate_domain_wildcard_suffix() {
+  local test_name="test_validate_domain_wildcard_suffix"
+  
+  if validate_domain "*.company.com"; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_validate_domain_wildcard_prefix() {
+  local test_name="test_validate_domain_wildcard_prefix"
+  
+  if validate_domain "git.*"; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_validate_domain_wildcard_invalid() {
+  local test_name="test_validate_domain_wildcard_invalid"
+  
+  if ! validate_domain "*invalid*"; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_validate_domain_wildcard_invalid_middle() {
+  local test_name="test_validate_domain_wildcard_invalid_middle"
+  
+  if ! validate_domain "git.*.com"; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
 echo "Running validation tests..."
 echo "================================"
 
@@ -123,6 +163,10 @@ test_validate_username_valid
 test_validate_username_empty
 test_validate_domain_valid
 test_validate_domain_invalid
+test_validate_domain_wildcard_suffix
+test_validate_domain_wildcard_prefix
+test_validate_domain_wildcard_invalid
+test_validate_domain_wildcard_invalid_middle
 test_validate_path_safe
 test_validate_path_unsafe_parent
 test_validate_path_unsafe_absolute

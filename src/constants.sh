@@ -2,9 +2,16 @@
 
 GIT_TOOLKIT_VERSION="0.1.0"
 
-GIT_TOOLKIT_DIR="${HOME}/.git-toolkit"
-ACCOUNTS_DIR="${GIT_TOOLKIT_DIR}/accounts"
-BACKUP_DIR="${GIT_TOOLKIT_DIR}/backup"
+GIT_TOOLKIT_DIR="${GIT_TOOLKIT_DIR:-${HOME}/.git-toolkit}"
+ACCOUNTS_DIR="${ACCOUNTS_DIR:-${GIT_TOOLKIT_DIR}/accounts}"
+BACKUP_DIR="${BACKUP_DIR:-${GIT_TOOLKIT_DIR}/backup}"
+
+SSH_CONFIG_FILE="${SSH_CONFIG_FILE:-${HOME}/.ssh/config}"
+SSH_CONFIG_START_MARKER="# === git-toolkit managed start ==="
+SSH_CONFIG_END_MARKER="# === git-toolkit managed end ==="
+
+CD_HOOK_START_MARKER="# === git-toolkit auto-switch start ==="
+CD_HOOK_END_MARKER="# === git-toolkit auto-switch end ==="
 
 DEFAULT_ALIASES=(
   "st=status"

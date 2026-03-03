@@ -14,6 +14,7 @@ source "$SRC_DIR/ui/menu.sh"
 source "$SRC_DIR/core/init.sh"
 source "$SRC_DIR/core/ssh.sh"
 source "$SRC_DIR/core/account.sh"
+source "$SRC_DIR/core/auto_switch.sh"
 source "$SRC_DIR/core/alias.sh"
 
 show_help() {
@@ -201,6 +202,8 @@ interactive_mode() {
               local user_name
               local user_email
               local ssh_key
+              local domains_str
+              local -a domains=()
               
               echo -n "请输入账号名称: "
               read -r account_name || true
@@ -218,7 +221,17 @@ interactive_mode() {
               read -r ssh_key || true
               
               echo ""
-              if add_account "$account_name" "$user_name" "$user_email" "$ssh_key"; then
+              echo -n "请输入关联的域名（多个域名用空格分隔，可选，直接回车跳过）: "
+              read -r domains_str || true
+              
+              if [[ -n "$domains_str" ]]; then
+                for domain in $domains_str; do
+                  domains+=("$domain")
+                done
+              fi
+              
+              echo ""
+              if add_account "$account_name" "$user_name" "$user_email" "$ssh_key" "${domains[@]}"; then
                 echo "账号添加成功！"
               fi
               ;;
@@ -260,6 +273,60 @@ interactive_mode() {
               ;;
             5)
               get_current_account
+              ;;
+            6)
+              echo ""
+              echo "=== cd 钩子管理 ==="
+              echo ""
+              echo "1. 安装 cd 钩子"
+              echo "2. 卸载 cd 钩子"
+              echo "3. 查看钩子状态"
+              echo "0. 返回"
+              echo ""
+              
+              local hook_choice
+              echo -n "请选择: "
+              read -r hook_choice || true
+              
+              case "$hook_choice" in
+                1)
+                  echo ""
+                  install_cd_hook
+                  ;;
+                2)
+                  echo ""
+                  uninstall_cd_hook
+                  ;;
+                3)
+                  echo ""
+                  local shell_type=$(basename "$SHELL")
+                  local rc_file
+                  
+                  if [[ "$shell_type" == "zsh" ]]; then
+                    rc_file="$HOME/.zshrc"
+                  elif [[ "$shell_type" == "bash" ]]; then
+                    rc_file="$HOME/.bashrc"
+                  else
+                    log_error "Unsupported shell: $shell_type"
+                    break
+                  fi
+                  
+                  if is_cd_hook_installed "$rc_file"; then
+                    echo "cd 钩子已安装在: $rc_file"
+                  else
+                    echo "cd 钩子未安装"
+                  fi
+                  ;;
+                0)
+                  ;;
+                *)
+                  log_warn "无效的选择"
+                  ;;
+              esac
+              ;;
+            7)
+              echo ""
+              list_managed_ssh_config
               ;;
             0)
               break
@@ -499,6 +566,8 @@ main() {
         echo "  switch <account-name>                                                          切换账号"
         echo "  delete <account-name>                                                          删除账号"
         echo "  current                                                                    查看当前账号"
+        echo "  auto-switch                                                                自动切换账号"
+        echo "  hook [install|uninstall|status]                                         管理 cd 钩子"
         exit 0
       fi
       
@@ -564,6 +633,55 @@ main() {
           ;;
         current)
           get_current_account
+          ;;
+        auto-switch)
+          auto_switch_account
+          ;;
+        hook)
+          local hook_action="${1:-}"
+          if [[ -z "$hook_action" ]]; then
+            echo "cd 钩子管理"
+            echo ""
+            echo "用法: git-toolkit account hook <操作>"
+            echo ""
+            echo "操作:"
+            echo "  install   安装 cd 钩子"
+            echo "  uninstall 卸载 cd 钩子"
+            echo "  status    查看钩子安装状态"
+            exit 0
+          fi
+          
+          case "$hook_action" in
+            install)
+              install_cd_hook
+              ;;
+            uninstall)
+              uninstall_cd_hook
+              ;;
+            status)
+              local shell_type=$(basename "$SHELL")
+              local rc_file
+              
+              if [[ "$shell_type" == "zsh" ]]; then
+                rc_file="$HOME/.zshrc"
+              elif [[ "$shell_type" == "bash" ]]; then
+                rc_file="$HOME/.bashrc"
+              else
+                log_error "Unsupported shell: $shell_type"
+                exit 1
+              fi
+              
+              if is_cd_hook_installed "$rc_file"; then
+                echo "cd 钩子已安装在: $rc_file"
+              else
+                echo "cd 钩子未安装"
+              fi
+              ;;
+            *)
+              log_error "未知钩子操作: $hook_action"
+              exit 1
+              ;;
+          esac
           ;;
         *)
           log_error "未知子命令: $subcmd"

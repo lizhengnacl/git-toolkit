@@ -9,14 +9,19 @@ source "$SCRIPT_DIR/../utils/logger.sh"
 source "$SCRIPT_DIR/../utils/git.sh"
 source "$SCRIPT_DIR/../utils/config.sh"
 source "$SCRIPT_DIR/../utils/validation.sh"
+source "$SCRIPT_DIR/../utils/ssh_config.sh"
 
 add_account() {
   local account_name="$1"
   local user_name="$2"
   local user_email="$3"
   local ssh_key_path="${4:-}"
-  shift 4
-  local -a domains=("${@:-}")
+  local -a domains=()
+  
+  if [[ $# -gt 4 ]]; then
+    shift 4
+    domains=("$@")
+  fi
   
   if ! validate_username "$user_name"; then
     log_error "无效的用户名"
@@ -29,6 +34,11 @@ add_account() {
   fi
   
   save_account_config "$account_name" "$user_name" "$user_email" "$ssh_key_path" "${domains[@]}"
+  
+  if [[ -n "$ssh_key_path" && ${#domains[@]} -gt 0 ]]; then
+    add_ssh_config_for_account "$account_name"
+  fi
+  
   log_info "账号添加成功: $account_name"
 }
 
@@ -52,6 +62,7 @@ list_accounts() {
       local cfg_name=""
       local cfg_email=""
       local cfg_ssh_key=""
+      local -a cfg_domains=()
       
       while IFS= read -r line; do
         if [[ "$line" =~ ^GIT_USER_NAME=\"(.*)\"$ ]]; then
@@ -60,6 +71,12 @@ list_accounts() {
           cfg_email="${BASH_REMATCH[1]}"
         elif [[ "$line" =~ ^SSH_KEY_PATH=\"(.*)\"$ ]]; then
           cfg_ssh_key="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^DOMAINS=\((.*)\)$ ]]; then
+          local domains_str="${BASH_REMATCH[1]}"
+          while [[ "$domains_str" =~ \"([^\"]+)\" ]]; do
+            cfg_domains+=("${BASH_REMATCH[1]}")
+            domains_str="${domains_str#*\"${BASH_REMATCH[1]}\"}"
+          done
         fi
       done < "$account_file"
       
@@ -68,6 +85,9 @@ list_accounts() {
       echo "  邮箱:   $cfg_email"
       if [[ -n "$cfg_ssh_key" ]]; then
         echo "  SSH 密钥: $cfg_ssh_key"
+      fi
+      if [[ ${#cfg_domains[@]} -gt 0 ]]; then
+        echo "  域名:    ${cfg_domains[*]}"
       fi
       echo ""
     fi
@@ -117,6 +137,7 @@ delete_account() {
     return 1
   fi
   
+  remove_ssh_config_for_account "$account_name"
   rm "$config_file"
   log_info "账号已删除: $account_name"
 }

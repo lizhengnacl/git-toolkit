@@ -17,9 +17,13 @@ validate_username() {
 
 validate_domain() {
   local domain="$1"
-  local domain_regex="^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
   
-  [[ -n "$domain" && "$domain" =~ $domain_regex ]]
+  if [[ "$domain" == *"*"* ]]; then
+    [[ "$domain" =~ ^\*\.[a-zA-Z0-9.-]+$ ]] || [[ "$domain" =~ ^[a-zA-Z0-9.-]+\.\*$ ]]
+  else
+    local domain_regex="^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
+    [[ -n "$domain" && "$domain" =~ $domain_regex ]]
+  fi
 }
 
 validate_path() {

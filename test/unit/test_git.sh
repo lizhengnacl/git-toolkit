@@ -84,6 +84,74 @@ test_git_unset_config() {
   fi
 }
 
+test_git_is_repository_false() {
+  local test_name="test_git_is_repository_false"
+  local test_dir="$TEST_TEMP_DIR/not-a-repo"
+  mkdir -p "$test_dir"
+  cd "$test_dir"
+  if ! git_is_repository; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+  cd "$TEST_TEMP_DIR"
+}
+
+test_git_is_repository_true() {
+  local test_name="test_git_is_repository_true"
+  local test_dir="$TEST_TEMP_DIR/is-a-repo"
+  mkdir -p "$test_dir"
+  cd "$test_dir"
+  git init -q >/dev/null 2>&1
+  if git_is_repository; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+  cd "$TEST_TEMP_DIR"
+}
+
+test_git_get_first_remote_no_remote() {
+  local test_name="test_git_get_first_remote_no_remote"
+  local test_dir="$TEST_TEMP_DIR/no-remote-repo"
+  mkdir -p "$test_dir"
+  cd "$test_dir"
+  git init -q >/dev/null 2>&1
+  local remote=$(git_get_first_remote)
+  if [[ -z "$remote" ]]; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name - expected empty, got: '$remote'"
+  fi
+  cd "$TEST_TEMP_DIR"
+}
+
+test_git_get_first_remote_with_remote() {
+  local test_name="test_git_get_first_remote_with_remote"
+  local test_dir="$TEST_TEMP_DIR/with-remote-repo"
+  mkdir -p "$test_dir"
+  cd "$test_dir"
+  git init -q >/dev/null 2>&1
+  git remote add origin "https://github.com/user/repo.git" >/dev/null 2>&1
+  git remote add upstream "https://github.com/upstream/repo.git" >/dev/null 2>&1
+  local remote=$(git_get_first_remote)
+  assert_equal "$test_name" "origin" "$remote"
+  cd "$TEST_TEMP_DIR"
+}
+
+test_git_get_remote_url() {
+  local test_name="test_git_get_remote_url"
+  local test_dir="$TEST_TEMP_DIR/remote-url-repo"
+  mkdir -p "$test_dir"
+  cd "$test_dir"
+  git init -q >/dev/null 2>&1
+  local expected_url="https://github.com/user/repo.git"
+  git remote add origin "$expected_url" >/dev/null 2>&1
+  local url=$(git_get_remote_url "origin")
+  assert_equal "$test_name" "$expected_url" "$url"
+  cd "$TEST_TEMP_DIR"
+}
+
 echo "Running git tests..."
 echo "================================"
 
@@ -91,6 +159,11 @@ test_git_set_and_get_config
 test_git_has_config_true
 test_git_has_config_false
 test_git_unset_config
+test_git_is_repository_false
+test_git_is_repository_true
+test_git_get_first_remote_no_remote
+test_git_get_first_remote_with_remote
+test_git_get_remote_url
 
 echo "================================"
 echo "Total: $test_count, Passed: $pass_count, Failed: $fail_count"
