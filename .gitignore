@@ -1,0 +1,33 @@
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+logs/
+
+# Cache directories
+.cache/
+tmp/
+temp/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.dSYM/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Testing
+test-results/
+coverage/
+
+.claude/settings.local.json
