@@ -30,4 +30,7 @@ Thumbs.db
 test-results/
 coverage/
 
+# Git Toolkit local config (not tracked)
+test_home/
+
 .claude/settings.local.json

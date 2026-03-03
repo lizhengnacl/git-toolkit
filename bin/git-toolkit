@@ -1,0 +1,640 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC_DIR="$SCRIPT_DIR/../src"
+
+source "$SRC_DIR/constants.sh"
+source "$SRC_DIR/utils/logger.sh"
+source "$SRC_DIR/utils/validation.sh"
+source "$SRC_DIR/ui/prompt.sh"
+source "$SRC_DIR/ui/menu.sh"
+source "$SRC_DIR/core/init.sh"
+source "$SRC_DIR/core/ssh.sh"
+source "$SRC_DIR/core/account.sh"
+source "$SRC_DIR/core/alias.sh"
+
+show_help() {
+  echo "Git Toolkit v$GIT_TOOLKIT_VERSION"
+  echo ""
+  echo "用法: git-toolkit [命令] [选项]"
+  echo ""
+  echo "命令:"
+  echo "  init              初始化 Git 环境"
+  echo "  ssh               SSH 密钥管理"
+  echo "  account           Git 账号管理"
+  echo "  alias             Git Alias 管理"
+  echo "  help              显示帮助"
+  echo "  version           显示版本"
+  echo ""
+  echo "运行不带命令以进入交互式菜单"
+}
+
+show_version() {
+  echo "Git Toolkit v$GIT_TOOLKIT_VERSION"
+}
+
+interactive_mode() {
+  while true; do
+    show_main_menu
+    
+    local choice
+    echo -n "请选择: "
+    read -r choice || true
+    
+    case "$choice" in
+      1)
+        echo ""
+        echo "=== 初始化 Git 环境 ==="
+        echo ""
+        local current_name=$(git config --global --get user.name 2>/dev/null || true)
+        local current_email=$(git config --global --get user.email 2>/dev/null || true)
+        
+        echo "当前配置："
+        echo "  用户名: ${current_name:-(未设置)}"
+        echo "  邮箱:   ${current_email:-（未设置)}"
+        echo ""
+        
+        local user_name
+        local user_email
+        
+        echo -n "请输入用户名 (默认 ${current_name:-(未设置)}): "
+        read -r user_name_input || true
+        if [[ -n "$user_name_input" ]]; then
+          user_name="$user_name_input"
+        else
+          user_name="$current_name"
+        fi
+        
+        echo ""
+        echo -n "请输入邮箱地址 (默认 ${current_email:-（未设置)}): "
+        read -r user_email_input || true
+        if [[ -n "$user_email_input" ]]; then
+          user_email="$user_email_input"
+        else
+          user_email="$current_email"
+        fi
+        
+        echo ""
+        if [[ -z "$user_name" || -z "$user_email" ]]; then
+          log_error "用户名和邮箱不能为空"
+        elif validate_username "$user_name" && validate_email "$user_email"; then
+          init_git_environment "$user_name" "$user_email"
+        else
+          log_error "输入验证失败"
+        fi
+        
+        echo ""
+        echo "按任意键继续..."
+        read -rs -n 1 || true
+        ;;
+      2)
+        while true; do
+          show_ssh_menu
+          local ssh_choice
+          echo -n "请选择: "
+          read -r ssh_choice || true
+          
+          case "$ssh_choice" in
+            1)
+              echo ""
+              echo "=== 生成 SSH 密钥 ==="
+              echo ""
+              
+              local key_type
+              local key_filename
+              local key_comment
+              
+              echo "请选择密钥类型:"
+              echo "1. ed25519 (推荐，更安全、更快速)"
+              echo "2. rsa (兼容性更好)"
+              echo ""
+              echo -n "请输入选项 (默认 1): "
+              read -r key_type_choice || true
+              
+              case "$key_type_choice" in
+                2)
+                  key_type="rsa"
+                  key_filename="id_rsa"
+                  ;;
+                *)
+                  key_type="ed25519"
+                  key_filename="id_ed25519"
+                  ;;
+              esac
+              
+              echo ""
+              echo -n "请输入密钥文件名 (默认 $key_filename): "
+              read -r key_filename_input || true
+              if [[ -n "$key_filename_input" ]]; then
+                key_filename="$key_filename_input"
+              fi
+              
+              echo ""
+              local default_comment=$(git config --global --get user.email 2>/dev/null || true)
+              echo -n "请输入注释（邮箱）(默认 ${default_comment:-(空)}): "
+              read -r key_comment_input || true
+              if [[ -n "$key_comment_input" ]]; then
+                key_comment="$key_comment_input"
+              else
+                key_comment="$default_comment"
+              fi
+              
+              echo ""
+              echo "即将生成以下 SSH 密钥："
+              echo "  类型: $key_type"
+              echo "  文件名: $key_filename"
+              echo "  注释: ${key_comment:-(空)}"
+              echo ""
+              
+              generate_ssh_key "$key_type" "$key_filename" "$key_comment"
+              ;;
+            2)
+              list_ssh_keys
+              ;;
+            3)
+              echo ""
+              echo "=== 测试 SSH 连接 ==="
+              echo ""
+              
+              local domain
+              echo -n "请输入 Git 平台域名 (默认 github.com): "
+              read -r domain_input || true
+              if [[ -n "$domain_input" ]]; then
+                domain="$domain_input"
+              else
+                domain="github.com"
+              fi
+              
+              echo ""
+              test_ssh_connection "$domain" || true
+              ;;
+            0)
+              break
+              ;;
+            *)
+              log_warn "无效的选择，请重新输入"
+              ;;
+          esac
+          
+          echo ""
+          echo "按任意键继续..."
+          read -rs -n 1 || true
+        done
+        ;;
+      3)
+        while true; do
+          show_account_menu
+          local account_choice
+          echo -n "请选择: "
+          read -r account_choice || true
+          
+          case "$account_choice" in
+            1)
+              echo ""
+              echo "=== 添加 Git 账号 ==="
+              echo ""
+              
+              local account_name
+              local user_name
+              local user_email
+              local ssh_key
+              
+              echo -n "请输入账号名称: "
+              read -r account_name || true
+              
+              echo ""
+              echo -n "请输入用户名: "
+              read -r user_name || true
+              
+              echo ""
+              echo -n "请输入邮箱地址: "
+              read -r user_email || true
+              
+              echo ""
+              echo -n "请输入 SSH 密钥路径（可选，直接回车跳过）: "
+              read -r ssh_key || true
+              
+              echo ""
+              if add_account "$account_name" "$user_name" "$user_email" "$ssh_key"; then
+                echo "账号添加成功！"
+              fi
+              ;;
+            2)
+              list_accounts
+              ;;
+            3)
+              echo ""
+              echo "=== 切换 Git 账号 ==="
+              echo ""
+              
+              local account_name
+              echo -n "请输入要切换的账号名称: "
+              read -r account_name || true
+              
+              echo ""
+              switch_account "$account_name"
+              ;;
+            4)
+              echo ""
+              echo "=== 删除 Git 账号 ==="
+              echo ""
+              
+              local account_name
+              echo -n "请输入要删除的账号名称: "
+              read -r account_name || true
+              
+              echo ""
+              echo -n "确定要删除账号 $account_name 吗？(y/N): "
+              read -r confirm || true
+              
+              if [[ "$confirm" =~ ^[Yy] ]]; then
+                echo ""
+                delete_account "$account_name"
+              else
+                echo ""
+                echo "已取消删除"
+              fi
+              ;;
+            5)
+              get_current_account
+              ;;
+            0)
+              break
+              ;;
+            *)
+              log_warn "无效的选择，请重新输入"
+              ;;
+          esac
+          
+          echo ""
+          echo "按任意键继续..."
+          read -rs -n 1 || true
+        done
+        ;;
+      4)
+        while true; do
+          show_alias_menu
+          local alias_choice
+          echo -n "请选择: "
+          read -r alias_choice || true
+          
+          case "$alias_choice" in
+            1)
+              apply_preset_aliases
+              ;;
+            2)
+              echo ""
+              echo "=== 添加 Git Alias ==="
+              echo ""
+              
+              local name
+              local command
+              
+              echo -n "请输入 alias 名称: "
+              read -r name || true
+              
+              echo ""
+              echo -n "请输入 alias 命令: "
+              read -r command || true
+              
+              echo ""
+              add_alias "$name" "$command"
+              ;;
+            3)
+              echo ""
+              echo "=== 删除 Git Alias ==="
+              echo ""
+              
+              local name
+              echo -n "请输入要删除的 alias 名称: "
+              read -r name || true
+              
+              echo ""
+              remove_alias "$name"
+              ;;
+            4)
+              list_aliases
+              ;;
+            0)
+              break
+              ;;
+            *)
+              log_warn "无效的选择，请重新输入"
+              ;;
+          esac
+          
+          echo ""
+          echo "按任意键继续..."
+          read -rs -n 1 || true
+        done
+        ;;
+      5)
+        show_help
+        ;;
+      0)
+        log_info "再见！"
+        exit 0
+        ;;
+      *)
+        log_warn "无效的选择，请重新输入"
+        ;;
+    esac
+    
+    echo ""
+    echo "按任意键继续..."
+    read -rs -n 1 || true
+  done
+}
+
+main() {
+  if [[ $# -eq 0 ]]; then
+    interactive_mode
+    return
+  fi
+  
+  local cmd="$1"
+  shift
+  
+  case "$cmd" in
+    init)
+      local user_name=""
+      local user_email=""
+      local yes=false
+      
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --name)
+            user_name="$2"
+            shift 2
+            ;;
+          --email)
+            user_email="$2"
+            shift 2
+            ;;
+          --yes)
+            yes=true
+            shift
+            ;;
+          *)
+            log_error "未知选项: $1"
+            exit 1
+            ;;
+        esac
+      done
+      
+      if [[ -z "$user_name" ]]; then
+        echo -n "请输入用户名: "
+        read -r user_name || true
+      fi
+      
+      if [[ -z "$user_email" ]]; then
+        echo -n "请输入邮箱地址: "
+        read -r user_email || true
+      fi
+      
+      if ! validate_username "$user_name"; then
+        log_error "无效的用户名"
+        exit 1
+      fi
+      
+      if ! validate_email "$user_email"; then
+        log_error "无效的邮箱地址"
+        exit 1
+      fi
+      
+      if [[ "$yes" != "true" ]]; then
+        echo ""
+        echo "即将应用以下配置："
+        echo "  用户名: $user_name"
+        echo "  邮箱:   $user_email"
+        echo ""
+        
+        echo -n "确认继续吗？(Y/n): "
+        read -r confirm || true
+        if [[ "$confirm" =~ ^[Nn] ]]; then
+          log_info "已取消"
+          exit 0
+        fi
+      fi
+      
+      init_git_environment "$user_name" "$user_email"
+      ;;
+    ssh)
+      local subcmd="${1:-}"
+      
+      if [[ -z "$subcmd" ]]; then
+        echo "SSH 密钥管理"
+        echo ""
+        echo "用法: git-toolkit ssh <子命令>"
+        echo ""
+        echo "子命令:"
+        echo "  generate [--type <type>] [--filename <name>] [--comment <comment>  生成 SSH 密钥"
+        echo "  list                                                            列出 SSH 密钥"
+        echo "  test [domain]                                                   测试 SSH 连接"
+        exit 0
+      fi
+      
+      shift
+      
+      case "$subcmd" in
+        generate)
+          local key_type="ed25519"
+          local key_filename="id_ed25519"
+          local key_comment=""
+          
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --type)
+                key_type="$2"
+                shift 2
+                ;;
+              --filename)
+                key_filename="$2"
+                shift 2
+                ;;
+              --comment)
+                key_comment="$2"
+                shift 2
+                ;;
+              *)
+                log_error "未知选项: $1"
+                exit 1
+                ;;
+            esac
+          done
+          
+          if [[ -z "$key_comment" ]]; then
+            key_comment=$(git config --global --get user.email 2>/dev/null || true)
+          fi
+          
+          generate_ssh_key "$key_type" "$key_filename" "$key_comment"
+          ;;
+        list)
+          list_ssh_keys
+          ;;
+        test)
+          local domain="${1:-github.com}"
+          test_ssh_connection "$domain"
+          ;;
+        *)
+          log_error "未知子命令: $subcmd"
+          exit 1
+          ;;
+      esac
+      ;;
+    account)
+      local subcmd="${1:-}"
+      
+      if [[ -z "$subcmd" ]]; then
+        echo "Git 账号管理"
+        echo ""
+        echo "用法: git-toolkit account <子命令>"
+        echo ""
+        echo "子命令:"
+        echo "  add --name <name> --user-name <name> --user-email <email> [--ssh-key <path>]  添加账号"
+        echo "  list                                                                       列出账号"
+        echo "  switch <account-name>                                                          切换账号"
+        echo "  delete <account-name>                                                          删除账号"
+        echo "  current                                                                    查看当前账号"
+        exit 0
+      fi
+      
+      shift
+      
+      case "$subcmd" in
+        add)
+          local account_name=""
+          local user_name=""
+          local user_email=""
+          local ssh_key=""
+          
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              --name)
+                account_name="$2"
+                shift 2
+                ;;
+              --user-name)
+                user_name="$2"
+                shift 2
+                ;;
+              --user-email)
+                user_email="$2"
+                shift 2
+                ;;
+              --ssh-key)
+                ssh_key="$2"
+                shift 2
+                ;;
+              *)
+                log_error "未知选项: $1"
+                exit 1
+                ;;
+            esac
+          done
+          
+          if [[ -z "$account_name" || -z "$user_name" || -z "$user_email" ]]; then
+            log_error "缺少必要参数"
+            exit 1
+          fi
+          
+          add_account "$account_name" "$user_name" "$user_email" "$ssh_key"
+          ;;
+        list)
+          list_accounts
+          ;;
+        switch)
+          local account_name="${1:-}"
+          if [[ -z "$account_name" ]]; then
+            log_error "请指定账号名称"
+            exit 1
+          fi
+          switch_account "$account_name"
+          ;;
+        delete)
+          local account_name="${1:-}"
+          if [[ -z "$account_name" ]]; then
+            log_error "请指定账号名称"
+            exit 1
+          fi
+          delete_account "$account_name"
+          ;;
+        current)
+          get_current_account
+          ;;
+        *)
+          log_error "未知子命令: $subcmd"
+          exit 1
+          ;;
+      esac
+      ;;
+    alias)
+      local subcmd="${1:-}"
+      
+      if [[ -z "$subcmd" ]]; then
+        echo "Git Alias 管理"
+        echo ""
+        echo "用法: git-toolkit alias <子命令>"
+        echo ""
+        echo "子命令:"
+        echo "  apply [--basic|--full]  应用预设 aliases"
+        echo "  add <name> <command>    添加 alias"
+        echo "  remove <name>            删除 alias"
+        echo "  list                    列出 aliases"
+        exit 0
+      fi
+      
+      shift
+      
+      case "$subcmd" in
+        apply)
+          local preset="full"
+          if [[ $# -gt 0 ]]; then
+            preset="$1"
+          fi
+          apply_preset_aliases "$preset"
+          ;;
+        add)
+          local name="${1:-}"
+          local command="${2:-}"
+          if [[ -z "$name" || -z "$command" ]]; then
+            log_error "请指定 alias 名称和命令"
+            exit 1
+          fi
+          add_alias "$name" "$command"
+          ;;
+        remove)
+          local name="${1:-}"
+          if [[ -z "$name" ]]; then
+            log_error "请指定 alias 名称"
+            exit 1
+          fi
+          remove_alias "$name"
+          ;;
+        list)
+          list_aliases
+          ;;
+        *)
+          log_error "未知子命令: $subcmd"
+          exit 1
+          ;;
+      esac
+      ;;
+    help)
+      show_help
+      ;;
+    version)
+      show_version
+      ;;
+    *)
+      log_error "未知命令: $cmd"
+      show_help
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

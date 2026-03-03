@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+GIT_TOOLKIT_VERSION="0.1.0"
+
+GIT_TOOLKIT_DIR="${HOME}/.git-toolkit"
+ACCOUNTS_DIR="${GIT_TOOLKIT_DIR}/accounts"
+BACKUP_DIR="${GIT_TOOLKIT_DIR}/backup"
+
+DEFAULT_ALIASES=(
+  "st=status"
+  "co=checkout"
+  "br=branch"
+  "ci=commit"
+  "cm=commit -m"
+  "unstage=reset HEAD --"
+  "last=log -1 HEAD"
+)
+
+EXIT_SUCCESS=0
+EXIT_ERROR=1
+EXIT_INVALID_ARG=2
+
+COLOR_RESET="\033[0m"
+COLOR_RED="\033[0;31m"
+COLOR_GREEN="\033[0;32m"
+COLOR_YELLOW="\033[1;33m"
+COLOR_BLUE="\033[0;34m"
