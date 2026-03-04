@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../constants.sh"
 source "$SCRIPT_DIR/../utils/logger.sh"
 source "$SCRIPT_DIR/../utils/validation.sh"
+source "$SCRIPT_DIR/../utils/config.sh"
 
 generate_ssh_key() {
   local key_type="${1:-ed25519}"
@@ -81,6 +82,128 @@ list_ssh_keys() {
         if [[ -n "$key_comment" ]]; then
           echo "  Comment: $key_comment"
         fi
+        echo ""
+        has_keys=true
+      fi
+    fi
+  done
+  
+  if ! $has_keys; then
+    echo "未找到 SSH 密钥"
+  fi
+  
+  echo "================================"
+}
+
+get_available_ssh_keys() {
+  local result_var="$1"
+  
+  eval "$result_var=()"
+  
+  local ssh_dir="$HOME/.ssh"
+  
+  if [[ ! -d "$ssh_dir" ]]; then
+    return 0
+  fi
+  
+  local keys=""
+  
+  for key_file in "$ssh_dir"/*; do
+    if [[ -f "$key_file" && ! "$key_file" =~ \.pub$ ]]; then
+      if [[ -z "$keys" ]]; then
+        keys="$key_file"
+      else
+        keys="$keys $key_file"
+      fi
+    fi
+  done
+  
+  eval "$result_var=($keys)"
+}
+
+get_key_usage() {
+  local key_path="$1"
+  local result_var="$2"
+  
+  local count=0
+  
+  if [[ ! -d "$ACCOUNTS_DIR" ]]; then
+    eval "$result_var=\"0\""
+    return 0
+  fi
+  
+  for account_file in "$ACCOUNTS_DIR"/*.conf; do
+    if [[ -f "$account_file" ]]; then
+      source "$account_file" 2>/dev/null || true
+      
+      if [[ -n "${SSH_KEY_PATH:-}" && "$SSH_KEY_PATH" == "$key_path" ]]; then
+        if [[ -n "${DOMAINS:-}" ]]; then
+          local domain_count=0
+          for d in "${DOMAINS[@]}"; do
+            domain_count=$((domain_count + 1))
+          done
+          count=$((count + domain_count))
+        fi
+      fi
+      
+      if [[ -n "${DOMAIN_SSH_KEYS:-}" ]]; then
+        for entry in "${DOMAIN_SSH_KEYS[@]}"; do
+          local entry_domain=""
+          local entry_key=""
+          
+          if parse_domain_key_entry "$entry" entry_domain entry_key; then
+            if [[ "$entry_key" == "$key_path" ]]; then
+              count=$((count + 1))
+            fi
+          fi
+        done
+      fi
+      
+      unset SSH_KEY_PATH DOMAINS DOMAIN_SSH_KEYS 2>/dev/null || true
+    fi
+  done
+  
+  eval "$result_var=\"$count\""
+}
+
+list_ssh_keys() {
+  local ssh_dir="$HOME/.ssh"
+  
+  if [[ ! -d "$ssh_dir" ]]; then
+    log_warn "SSH 目录不存在: $ssh_dir"
+    return 0
+  fi
+  
+  echo "SSH 密钥列表:"
+  echo "================================"
+  
+  local has_keys=false
+  
+  for key_file in "$ssh_dir"/*; do
+    if [[ -f "$key_file" && ! "$key_file" =~ \.pub$ ]]; then
+      local is_ssh_key=false
+      
+      if head -1 "$key_file" 2>/dev/null | grep -E "(BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY|PuTTY-User-Key-File)" >/dev/null; then
+        is_ssh_key=true
+      fi
+      
+      if $is_ssh_key; then
+        local pub_key_file="$key_file.pub"
+        local key_name=$(basename "$key_file")
+        local key_comment=""
+        local usage=0
+        
+        if [[ -f "$pub_key_file" ]]; then
+          key_comment=$(awk '{print $NF}' "$pub_key_file" 2>/dev/null || true)
+        fi
+        
+        get_key_usage "$key_file" usage
+        
+        echo "- $key_name"
+        if [[ -n "$key_comment" ]]; then
+          echo "  Comment: $key_comment"
+        fi
+        echo "  Usage: $usage"
         echo ""
         has_keys=true
       fi

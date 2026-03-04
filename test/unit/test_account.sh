@@ -160,6 +160,80 @@ test_add_account_with_multiple_domains_adds_all_ssh_config
 test_delete_account_removes_ssh_config
 test_list_accounts_shows_domains
 
+test_load_account_config_supports_old_format() {
+  local test_name="test_load_account_config_supports_old_format"
+  setup_test_env
+  
+  cat > "$ACCOUNTS_DIR/old_format.conf" <<EOF
+ACCOUNT_NAME="old"
+GIT_USER_NAME="Old User"
+GIT_USER_EMAIL="old@example.com"
+SSH_KEY_PATH="$HOME/.ssh/old_key"
+DOMAINS=("github.com" "gitlab.com")
+EOF
+  
+  load_account_config "old_format"
+  
+  if [[ "$ACCOUNT_NAME" == "old" && "$GIT_USER_NAME" == "Old User" && "$GIT_USER_EMAIL" == "old@example.com" ]]; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_save_account_config_supports_domain_ssh_keys() {
+  local test_name="test_save_account_config_supports_domain_ssh_keys"
+  setup_test_env
+  
+  save_account_config_with_mapping "new_format" "New User" "new@example.com" "$HOME/.ssh/default_key" '"github.com" "gitlab.com" "gitee.com"' '"github.com:$HOME/.ssh/github_key" "gitlab.com:$HOME/.ssh/gitlab_key"'
+  
+  local config_file="$ACCOUNTS_DIR/new_format.conf"
+  
+  assert_file_contains "$test_name" "$config_file" "DOMAIN_SSH_KEYS"
+}
+
+test_list_accounts_shows_default_key_and_mappings() {
+  local test_name="test_list_accounts_shows_default_key_and_mappings"
+  setup_test_env
+  
+  cat > "$ACCOUNTS_DIR/test.conf" <<EOF
+ACCOUNT_NAME="test"
+GIT_USER_NAME="Test User"
+GIT_USER_EMAIL="test@example.com"
+SSH_KEY_PATH="$HOME/.ssh/default_key"
+DOMAINS=("github.com" "gitlab.com")
+DOMAIN_SSH_KEYS=("github.com:$HOME/.ssh/github_key")
+EOF
+  
+  local output=$(list_accounts)
+  
+  if [[ "$output" == *"SSH 密钥"* && "$output" == *"github.com"* && "$output" == *"github_key"* ]]; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_edit_account_updates_config() {
+  local test_name="test_edit_account_updates_config"
+  setup_test_env
+  
+  add_account "test" "Old User" "old@example.com" "$HOME/.ssh/old_key" "github.com"
+  
+  edit_account "test" "New User" "new@example.com" "$HOME/.ssh/new_key" '"github.com" "gitlab.com"' '"github.com:$HOME/.ssh/github_key"'
+  
+  local config_file="$ACCOUNTS_DIR/test.conf"
+  
+  assert_file_contains "$test_name" "$config_file" "GIT_USER_NAME=\"New User\""
+  assert_file_contains "$test_name" "$config_file" "GIT_USER_EMAIL=\"new@example.com\""
+  assert_file_contains "$test_name" "$config_file" "SSH_KEY_PATH=\"$HOME/.ssh/new_key\""
+}
+
+test_load_account_config_supports_old_format
+test_save_account_config_supports_domain_ssh_keys
+test_list_accounts_shows_default_key_and_mappings
+test_edit_account_updates_config
+
 echo "================================"
 echo "Total: $test_count, Passed: $pass_count, Failed: $fail_count"
 

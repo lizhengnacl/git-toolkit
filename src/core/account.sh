@@ -16,11 +16,14 @@ add_account() {
   local user_name="$2"
   local user_email="$3"
   local ssh_key_path="${4:-}"
-  local -a domains=()
+  local has_domains=false
   
   if [[ $# -gt 4 ]]; then
     shift 4
-    domains=("$@")
+    has_domains=true
+    save_account_config "$account_name" "$user_name" "$user_email" "$ssh_key_path" "$@"
+  else
+    save_account_config "$account_name" "$user_name" "$user_email" "$ssh_key_path"
   fi
   
   if ! validate_username "$user_name"; then
@@ -33,9 +36,7 @@ add_account() {
     return 1
   fi
   
-  save_account_config "$account_name" "$user_name" "$user_email" "$ssh_key_path" "${domains[@]}"
-  
-  if [[ -n "$ssh_key_path" && ${#domains[@]} -gt 0 ]]; then
+  if [[ -n "$ssh_key_path" && $has_domains == true ]]; then
     add_ssh_config_for_account "$account_name"
   fi
   
@@ -62,7 +63,8 @@ list_accounts() {
       local cfg_name=""
       local cfg_email=""
       local cfg_ssh_key=""
-      local -a cfg_domains=()
+      local cfg_domains_str=""
+      local cfg_domain_ssh_keys_str=""
       
       while IFS= read -r line; do
         if [[ "$line" =~ ^GIT_USER_NAME=\"(.*)\"$ ]]; then
@@ -72,11 +74,9 @@ list_accounts() {
         elif [[ "$line" =~ ^SSH_KEY_PATH=\"(.*)\"$ ]]; then
           cfg_ssh_key="${BASH_REMATCH[1]}"
         elif [[ "$line" =~ ^DOMAINS=\((.*)\)$ ]]; then
-          local domains_str="${BASH_REMATCH[1]}"
-          while [[ "$domains_str" =~ \"([^\"]+)\" ]]; do
-            cfg_domains+=("${BASH_REMATCH[1]}")
-            domains_str="${domains_str#*\"${BASH_REMATCH[1]}\"}"
-          done
+          cfg_domains_str="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^DOMAIN_SSH_KEYS=\((.*)\)$ ]]; then
+          cfg_domain_ssh_keys_str="${BASH_REMATCH[1]}"
         fi
       done < "$account_file"
       
@@ -84,10 +84,22 @@ list_accounts() {
       echo "  用户名: $cfg_name"
       echo "  邮箱:   $cfg_email"
       if [[ -n "$cfg_ssh_key" ]]; then
-        echo "  SSH 密钥: $cfg_ssh_key"
+        echo "  默认 SSH 密钥: $cfg_ssh_key"
       fi
-      if [[ ${#cfg_domains[@]} -gt 0 ]]; then
-        echo "  域名:    ${cfg_domains[*]}"
+      if [[ -n "$cfg_domains_str" ]]; then
+        echo "  域名:    $cfg_domains_str"
+      fi
+      if [[ -n "$cfg_domain_ssh_keys_str" ]]; then
+        echo "  域名-密钥映射:"
+        local temp_str="$cfg_domain_ssh_keys_str"
+        while [[ "$temp_str" =~ \"([^\"]+)\" ]]; do
+          local mapping="${BASH_REMATCH[1]}"
+          local domain=""
+          local key_path=""
+          parse_domain_key_entry "$mapping" domain key_path
+          echo "    - $domain: $key_path"
+          temp_str="${temp_str#*\"${BASH_REMATCH[1]}\"}"
+        done
       fi
       echo ""
     fi
@@ -151,4 +163,39 @@ get_current_account() {
   echo "用户名: $name"
   echo "邮箱:   $email"
   echo "================================"
+}
+
+edit_account() {
+  local account_name="$1"
+  local user_name="$2"
+  local user_email="$3"
+  local ssh_key_path="$4"
+  local domains_str="$5"
+  local domain_ssh_keys_str="${6:-}"
+  
+  local config_file="$ACCOUNTS_DIR/$account_name.conf"
+  
+  if [[ ! -f "$config_file" ]]; then
+    log_error "账号不存在: $account_name"
+    return 1
+  fi
+  
+  if ! validate_username "$user_name"; then
+    log_error "无效的用户名"
+    return 1
+  fi
+  
+  if ! validate_email "$user_email"; then
+    log_error "无效的邮箱地址"
+    return 1
+  fi
+  
+  remove_ssh_config_for_account "$account_name"
+  save_account_config_with_mapping "$account_name" "$user_name" "$user_email" "$ssh_key_path" "$domains_str" "$domain_ssh_keys_str"
+  
+  if [[ -n "$ssh_key_path" ]]; then
+    add_ssh_config_for_account "$account_name"
+  fi
+  
+  log_info "账号编辑成功: $account_name"
 }

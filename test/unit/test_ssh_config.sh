@@ -152,6 +152,79 @@ test_remove_ssh_config_removes_entry
 test_list_managed_ssh_config_lists_entries
 test_rebuild_all_ssh_config_rebuilds
 
+test_add_ssh_config_for_account_with_domain_key_mapping() {
+  local test_name="test_add_ssh_config_for_account_with_domain_key_mapping"
+  setup_test_env
+  
+  mkdir -p "$ACCOUNTS_DIR"
+  cat > "$ACCOUNTS_DIR/test.conf" <<EOF
+ACCOUNT_NAME="test"
+GIT_USER_NAME="Test"
+GIT_USER_EMAIL="test@example.com"
+SSH_KEY_PATH="$HOME/.ssh/default_key"
+DOMAINS=("github.com" "gitlab.com" "gitee.com")
+DOMAIN_SSH_KEYS=("github.com:$HOME/.ssh/github_key" "gitlab.com:$HOME/.ssh/gitlab_key")
+EOF
+  
+  add_ssh_config_for_account "test"
+  
+  assert_file_contains "$test_name" "$TEST_SSH_CONFIG" "Host github.com"
+  assert_file_contains "$test_name" "$TEST_SSH_CONFIG" "IdentityFile $HOME/.ssh/github_key"
+  assert_file_contains "$test_name" "$TEST_SSH_CONFIG" "Host gitlab.com"
+  assert_file_contains "$test_name" "$TEST_SSH_CONFIG" "IdentityFile $HOME/.ssh/gitlab_key"
+  assert_file_contains "$test_name" "$TEST_SSH_CONFIG" "Host gitee.com"
+  assert_file_contains "$test_name" "$TEST_SSH_CONFIG" "IdentityFile $HOME/.ssh/default_key"
+}
+
+test_get_key_usage_counts_usage() {
+  local test_name="test_get_key_usage_counts_usage"
+  setup_test_env
+  
+  mkdir -p "$ACCOUNTS_DIR"
+  cat > "$ACCOUNTS_DIR/test1.conf" <<EOF
+ACCOUNT_NAME="test1"
+GIT_USER_NAME="Test1"
+GIT_USER_EMAIL="test1@example.com"
+SSH_KEY_PATH="$HOME/.ssh/shared_key"
+DOMAINS=("github.com" "gitlab.com")
+EOF
+  
+  cat > "$ACCOUNTS_DIR/test2.conf" <<EOF
+ACCOUNT_NAME="test2"
+GIT_USER_NAME="Test2"
+GIT_USER_EMAIL="test2@example.com"
+SSH_KEY_PATH="$HOME/.ssh/shared_key"
+DOMAINS=("gitee.com")
+EOF
+  
+  local usage=""
+  get_key_usage "$HOME/.ssh/shared_key" usage
+  
+  if [[ "$usage" == "3" ]]; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name - expected 3, got $usage"
+  fi
+}
+
+test_get_key_usage_returns_zero_for_unused() {
+  local test_name="test_get_key_usage_returns_zero_for_unused"
+  setup_test_env
+  
+  local usage=""
+  get_key_usage "$HOME/.ssh/unused_key" usage
+  
+  if [[ "$usage" == "0" ]]; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name - expected 0, got $usage"
+  fi
+}
+
+test_add_ssh_config_for_account_with_domain_key_mapping
+test_get_key_usage_counts_usage
+test_get_key_usage_returns_zero_for_unused
+
 echo "================================"
 echo "Total: $test_count, Passed: $pass_count, Failed: $fail_count"
 

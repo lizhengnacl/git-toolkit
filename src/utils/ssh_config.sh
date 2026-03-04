@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../constants.sh"
 source "$SCRIPT_DIR/logger.sh"
 source "$SCRIPT_DIR/backup.sh"
+source "$SCRIPT_DIR/config.sh"
 
 add_ssh_config() {
   local domain="$1"
@@ -107,24 +108,78 @@ add_ssh_config_for_account() {
   
   source "$config_file"
   
-  local has_ssh_key=false
-  local has_domains=false
+  local default_key="${SSH_KEY_PATH:-}"
   
-  if [[ -n "${SSH_KEY_PATH:-}" ]]; then
-    has_ssh_key=true
-  fi
-  
-  if [[ -n "${DOMAINS:-}" && ${#DOMAINS[@]} -gt 0 ]]; then
-    has_domains=true
-  fi
-  
-  if [[ "$has_ssh_key" == true && "$has_domains" == true ]]; then
+  if [[ -n "${DOMAINS:-}" ]]; then
     for domain in "${DOMAINS[@]}"; do
-      add_ssh_config "$domain" "$SSH_KEY_PATH"
+      local key_to_use="$default_key"
+      
+      if [[ -n "${DOMAIN_SSH_KEYS:-}" ]]; then
+        for entry in "${DOMAIN_SSH_KEYS[@]}"; do
+          local entry_domain=""
+          local entry_key=""
+          
+          if parse_domain_key_entry "$entry" entry_domain entry_key; then
+            if [[ "$entry_domain" == "$domain" ]]; then
+              key_to_use="$entry_key"
+              break
+            fi
+          fi
+        done
+      fi
+      
+      if [[ -n "$key_to_use" ]]; then
+        add_ssh_config "$domain" "$key_to_use"
+      fi
     done
   fi
   
-  unset DOMAINS SSH_KEY_PATH 2>/dev/null || true
+  unset DOMAINS SSH_KEY_PATH DOMAIN_SSH_KEYS 2>/dev/null || true
+}
+
+get_key_usage() {
+  local key_path="$1"
+  local result_var="$2"
+  
+  local count=0
+  
+  if [[ ! -d "$ACCOUNTS_DIR" ]]; then
+    eval "$result_var=\"0\""
+    return 0
+  fi
+  
+  for account_file in "$ACCOUNTS_DIR"/*.conf; do
+    if [[ -f "$account_file" ]]; then
+      source "$account_file" 2>/dev/null || true
+      
+      if [[ -n "${SSH_KEY_PATH:-}" && "$SSH_KEY_PATH" == "$key_path" ]]; then
+        if [[ -n "${DOMAINS:-}" ]]; then
+          local domain_count=0
+          for d in "${DOMAINS[@]}"; do
+            domain_count=$((domain_count + 1))
+          done
+          count=$((count + domain_count))
+        fi
+      fi
+      
+      if [[ -n "${DOMAIN_SSH_KEYS:-}" ]]; then
+        for entry in "${DOMAIN_SSH_KEYS[@]}"; do
+          local entry_domain=""
+          local entry_key=""
+          
+          if parse_domain_key_entry "$entry" entry_domain entry_key; then
+            if [[ "$entry_key" == "$key_path" ]]; then
+              count=$((count + 1))
+            fi
+          fi
+        done
+      fi
+      
+      unset SSH_KEY_PATH DOMAINS DOMAIN_SSH_KEYS 2>/dev/null || true
+    fi
+  done
+  
+  eval "$result_var=\"$count\""
 }
 
 remove_ssh_config_for_account() {

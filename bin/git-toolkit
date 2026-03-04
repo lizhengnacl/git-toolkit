@@ -11,6 +11,7 @@ source "$SRC_DIR/utils/logger.sh"
 source "$SRC_DIR/utils/validation.sh"
 source "$SRC_DIR/ui/prompt.sh"
 source "$SRC_DIR/ui/menu.sh"
+source "$SRC_DIR/ui/account_wizard.sh"
 source "$SRC_DIR/core/init.sh"
 source "$SRC_DIR/core/ssh.sh"
 source "$SRC_DIR/core/account.sh"
@@ -235,6 +236,114 @@ interactive_mode() {
                 echo "账号添加成功！"
               fi
               ;;
+            4)
+              echo ""
+              echo "=== 编辑 Git 账号 ==="
+              echo ""
+              
+              list_accounts
+              
+              local account_name
+              echo -n "请输入要编辑的账号名称: "
+              read -r account_name || true
+              
+              local config_file="$ACCOUNTS_DIR/$account_name.conf"
+              if [[ ! -f "$config_file" ]]; then
+                log_error "账号不存在: $account_name"
+                break
+              fi
+              
+              load_account_config "$account_name"
+              
+              echo ""
+              echo "当前配置："
+              echo "  用户名: $GIT_USER_NAME"
+              echo "  邮箱:   $GIT_USER_EMAIL"
+              if [[ -n "$SSH_KEY_PATH" ]]; then
+                echo "  SSH 密钥: $SSH_KEY_PATH"
+              fi
+              echo ""
+              
+              local user_name
+              local user_email
+              local ssh_key_path
+              
+              echo -n "请输入新的用户名 [${GIT_USER_NAME}]: "
+              read -r user_name || true
+              if [[ -z "$user_name" ]]; then
+                user_name="$GIT_USER_NAME"
+              fi
+              
+              echo ""
+              echo -n "请输入新的邮箱地址 [${GIT_USER_EMAIL}]: "
+              read -r user_email || true
+              if [[ -z "$user_email" ]]; then
+                user_email="$GIT_USER_EMAIL"
+              fi
+              
+              echo ""
+              echo -n "请输入新的 SSH 密钥路径（留空保持不变） [${SSH_KEY_PATH:-}]: "
+              read -r ssh_key_path || true
+              if [[ -z "$ssh_key_path" ]]; then
+                ssh_key_path="${SSH_KEY_PATH:-}"
+              fi
+              
+              local domains_str=""
+              if [[ -n "${DOMAINS:-}" ]]; then
+                domains_str="${DOMAINS[*]}"
+              fi
+              
+              local new_domains_str
+              echo ""
+              echo -n "请输入新的域名列表（多个域名用空格分隔，留空保持不变） [${domains_str:-}]: "
+              read -r new_domains_str || true
+              if [[ -z "$new_domains_str" ]]; then
+                if [[ -n "$domains_str" ]]; then
+                  new_domains_str=""
+                  for domain in "${DOMAINS[@]}"; do
+                    new_domains_str="$new_domains_str \"$domain\""
+                  done
+                  new_domains_str="${new_domains_str:1}"
+                fi
+              else
+                local temp_str="$new_domains_str"
+                new_domains_str=""
+                for domain in $temp_str; do
+                  new_domains_str="$new_domains_str \"$domain\""
+                done
+                new_domains_str="${new_domains_str:1}"
+              fi
+              
+              local domain_ssh_keys_str=""
+              if [[ -n "${DOMAIN_SSH_KEYS:-}" ]]; then
+                for mapping in "${DOMAIN_SSH_KEYS[@]}"; do
+                  domain_ssh_keys_str="$domain_ssh_keys_str \"$mapping\""
+                done
+                domain_ssh_keys_str="${domain_ssh_keys_str:1}"
+              fi
+              
+              echo ""
+              echo "即将应用以下变更："
+              echo "  用户名: $user_name"
+              echo "  邮箱:   $user_email"
+              echo "  SSH 密钥: $ssh_key_path"
+              if [[ -n "$new_domains_str" ]]; then
+                echo "  域名: $new_domains_str"
+              fi
+              if [[ -n "$domain_ssh_keys_str" ]]; then
+                echo "  域名-密钥映射: $domain_ssh_keys_str"
+              fi
+              echo ""
+              
+              echo -n "确认继续吗？(Y/n): "
+              read -r confirm || true
+              if [[ ! "$confirm" =~ ^[Nn] ]]; then
+                edit_account "$account_name" "$user_name" "$user_email" "$ssh_key_path" "$new_domains_str" "$domain_ssh_keys_str"
+                echo "账号编辑成功！"
+              else
+                echo "已取消编辑"
+              fi
+              ;;
             2)
               list_accounts
               ;;
@@ -250,7 +359,7 @@ interactive_mode() {
               echo ""
               switch_account "$account_name"
               ;;
-            4)
+            5)
               echo ""
               echo "=== 删除 Git 账号 ==="
               echo ""
@@ -271,10 +380,10 @@ interactive_mode() {
                 echo "已取消删除"
               fi
               ;;
-            5)
+            6)
               get_current_account
               ;;
-            6)
+            7)
               echo ""
               echo "=== cd 钩子管理 ==="
               echo ""
@@ -324,7 +433,7 @@ interactive_mode() {
                   ;;
               esac
               ;;
-            7)
+            8)
               echo ""
               list_managed_ssh_config
               ;;
@@ -562,6 +671,7 @@ main() {
         echo ""
         echo "子命令:"
         echo "  add --name <name> --user-name <name> --user-email <email> [--ssh-key <path>]  添加账号"
+        echo "  edit <account-name>                                                              编辑账号"
         echo "  list                                                                       列出账号"
         echo "  switch <account-name>                                                          切换账号"
         echo "  delete <account-name>                                                          删除账号"
@@ -611,6 +721,109 @@ main() {
           fi
           
           add_account "$account_name" "$user_name" "$user_email" "$ssh_key"
+          ;;
+        edit)
+          local account_name="${1:-}"
+          if [[ -z "$account_name" ]]; then
+            log_error "请指定账号名称"
+            exit 1
+          fi
+          
+          local config_file="$ACCOUNTS_DIR/$account_name.conf"
+          if [[ ! -f "$config_file" ]]; then
+            log_error "账号不存在: $account_name"
+            exit 1
+          fi
+          
+          load_account_config "$account_name"
+          
+          echo "当前配置："
+          echo "  用户名: $GIT_USER_NAME"
+          echo "  邮箱:   $GIT_USER_EMAIL"
+          if [[ -n "$SSH_KEY_PATH" ]]; then
+            echo "  SSH 密钥: $SSH_KEY_PATH"
+          fi
+          if [[ -n "${DOMAINS:-}" ]]; then
+            echo "  域名: ${DOMAINS[*]}"
+          fi
+          echo ""
+          
+          local user_name
+          local user_email
+          local ssh_key_path
+          
+          echo -n "请输入新的用户名 [${GIT_USER_NAME}]: "
+          read -r user_name || true
+          if [[ -z "$user_name" ]]; then
+            user_name="$GIT_USER_NAME"
+          fi
+          
+          echo -n "请输入新的邮箱地址 [${GIT_USER_EMAIL}]: "
+          read -r user_email || true
+          if [[ -z "$user_email" ]]; then
+            user_email="$GIT_USER_EMAIL"
+          fi
+          
+          echo -n "请输入新的 SSH 密钥路径（留空保持不变） [${SSH_KEY_PATH:-}]: "
+          read -r ssh_key_path || true
+          if [[ -z "$ssh_key_path" ]]; then
+            ssh_key_path="${SSH_KEY_PATH:-}"
+          fi
+          
+          local domains_str=""
+          if [[ -n "${DOMAINS:-}" ]]; then
+            domains_str="${DOMAINS[*]}"
+          fi
+          
+          local new_domains_str
+          echo -n "请输入新的域名列表（多个域名用空格分隔，留空保持不变） [${domains_str:-}]: "
+          read -r new_domains_str || true
+          if [[ -z "$new_domains_str" ]]; then
+            if [[ -n "$domains_str" ]]; then
+              new_domains_str=""
+              for domain in "${DOMAINS[@]}"; do
+                new_domains_str="$new_domains_str \"$domain\""
+              done
+              new_domains_str="${new_domains_str:1}"
+            fi
+          else
+            local temp_str="$new_domains_str"
+            new_domains_str=""
+            for domain in $temp_str; do
+              new_domains_str="$new_domains_str \"$domain\""
+            done
+            new_domains_str="${new_domains_str:1}"
+          fi
+          
+          local domain_ssh_keys_str=""
+          if [[ -n "${DOMAIN_SSH_KEYS:-}" ]]; then
+            for mapping in "${DOMAIN_SSH_KEYS[@]}"; do
+              domain_ssh_keys_str="$domain_ssh_keys_str \"$mapping\""
+            done
+            domain_ssh_keys_str="${domain_ssh_keys_str:1}"
+          fi
+          
+          echo ""
+          echo "即将应用以下变更："
+          echo "  用户名: $user_name"
+          echo "  邮箱:   $user_email"
+          echo "  SSH 密钥: $ssh_key_path"
+          if [[ -n "$new_domains_str" ]]; then
+            echo "  域名: $new_domains_str"
+          fi
+          if [[ -n "$domain_ssh_keys_str" ]]; then
+            echo "  域名-密钥映射: $domain_ssh_keys_str"
+          fi
+          echo ""
+          
+          echo -n "确认继续吗？(Y/n): "
+          read -r confirm || true
+          if [[ ! "$confirm" =~ ^[Nn] ]]; then
+            edit_account "$account_name" "$user_name" "$user_email" "$ssh_key_path" "$new_domains_str" "$domain_ssh_keys_str"
+            echo "账号编辑成功！"
+          else
+            echo "已取消编辑"
+          fi
           ;;
         list)
           list_accounts
