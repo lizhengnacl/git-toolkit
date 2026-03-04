@@ -307,6 +307,4 @@ main() {
   start_git_toolkit
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  main "$@"
-fi
+(return 0 2>/dev/null) || main "$@"
