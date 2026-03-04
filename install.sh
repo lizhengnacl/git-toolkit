@@ -7,7 +7,7 @@ IFS=$'\n\t'
 export LC_ALL=C
 
 # 仓库配置
-GITHUB_REPO_OWNER="username"
+GITHUB_REPO_OWNER="lizhengnacl"
 GITHUB_REPO_NAME="git-toolkit"
 GITHUB_BRANCH="main"
 GIT_REPO_URL="https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}.git"

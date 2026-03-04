@@ -29,13 +29,13 @@
 使用 curl 安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/username/git-toolkit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lizhengnacl/git-toolkit/main/install.sh | bash
 ```
 
 或使用 wget 安装：
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/username/git-toolkit/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/lizhengnacl/git-toolkit/main/install.sh | bash
 ```
 
 ### 手动安装
