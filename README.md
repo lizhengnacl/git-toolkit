@@ -24,6 +24,22 @@
 
 ## 安装
 
+### 快速安装（推荐）
+
+使用 curl 安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/username/git-toolkit/main/install.sh | bash
+```
+
+或使用 wget 安装：
+
+```bash
+wget -qO- https://raw.githubusercontent.com/username/git-toolkit/main/install.sh | bash
+```
+
+### 手动安装
+
 ```bash
 # 克隆项目
 git clone <repo-url>
