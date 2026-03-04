@@ -29,6 +29,8 @@ add_ssh_config() {
     echo "Host $domain" >> "$temp_file"
     echo "  IdentityFile $ssh_key_path" >> "$temp_file"
     echo "  IdentitiesOnly yes" >> "$temp_file"
+    echo "  AddKeysToAgent yes" >> "$temp_file"
+    echo "  UseKeychain yes" >> "$temp_file"
     echo "$SSH_CONFIG_END_MARKER" >> "$temp_file"
   else
     local in_block=false
@@ -41,6 +43,8 @@ add_ssh_config() {
           echo "Host $domain" >> "$temp_file"
           echo "  IdentityFile $ssh_key_path" >> "$temp_file"
           echo "  IdentitiesOnly yes" >> "$temp_file"
+          echo "  AddKeysToAgent yes" >> "$temp_file"
+          echo "  UseKeychain yes" >> "$temp_file"
           added=true
         fi
       elif [[ "$line" == "$SSH_CONFIG_END_MARKER" ]]; then
