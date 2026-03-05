@@ -17,6 +17,7 @@ source "$SRC_DIR/core/ssh.sh"
 source "$SRC_DIR/core/account.sh"
 source "$SRC_DIR/core/auto_switch.sh"
 source "$SRC_DIR/core/alias.sh"
+source "$SRC_DIR/utils/migration.sh"
 
 show_help() {
   echo "Git Toolkit v$GIT_TOOLKIT_VERSION"
@@ -25,7 +26,9 @@ show_help() {
   echo ""
   echo "命令:"
   echo "  init              初始化 Git 环境"
-  echo "  ssh               SSH 密钥管理"
+  if is_expert_mode; then
+    echo "  ssh               SSH 密钥管理"
+  fi
   echo "  account           Git 账号管理"
   echo "  alias             Git Alias 管理"
   echo "  help              显示帮助"
@@ -202,38 +205,41 @@ interactive_mode() {
               local account_name
               local user_name
               local user_email
-              local ssh_key
+              local ssh_key_path
               local domains_str
-              local -a domains=()
+              local domain_ssh_keys_str
+              local key_filename
+              local key_comment
               
-              echo -n "请输入账号名称: "
-              read -r account_name || true
-              
-              echo ""
-              echo -n "请输入用户名: "
-              read -r user_name || true
+              read account_name user_name user_email ssh_key_path domains_str domain_ssh_keys_str key_filename key_comment < <(run_simplified_account_add_wizard)
               
               echo ""
-              echo -n "请输入邮箱地址: "
-              read -r user_email || true
-              
-              echo ""
-              echo -n "请输入 SSH 密钥路径（可选，直接回车跳过）: "
-              read -r ssh_key || true
-              
-              echo ""
-              echo -n "请输入关联的域名（多个域名用空格分隔，可选，直接回车跳过）: "
-              read -r domains_str || true
-              
-              if [[ -n "$domains_str" ]]; then
-                for domain in $domains_str; do
-                  domains+=("$domain")
-                done
-              fi
-              
-              echo ""
-              if add_account "$account_name" "$user_name" "$user_email" "$ssh_key" "${domains[@]}"; then
-                echo "账号添加成功！"
+              if [[ -z "$account_name" || -z "$user_name" || -z "$user_email" ]]; then
+                log_error "账号信息不完整"
+              else
+                if [[ "$ssh_key_path" == *"id_ed25519_"* && ! -f "$ssh_key_path" ]]; then
+                  generate_ssh_key "ed25519" "$key_filename" "$key_comment"
+                fi
+                
+                local -a domains=()
+                if [[ -n "$domains_str" ]]; then
+                  local temp_str="$domains_str"
+                  while [[ "$temp_str" =~ \"([^\"]+)\" ]]; do
+                    domains+=("${BASH_REMATCH[1]}")
+                    temp_str="${temp_str#*\"${BASH_REMATCH[1]}\"}"
+                  done
+                fi
+                
+                if add_account "$account_name" "$user_name" "$user_email" "$ssh_key_path" "${domains[@]}"; then
+                  echo ""
+                  echo "账号添加成功！"
+                  
+                  if [[ -n "$ssh_key_path" ]]; then
+                    echo ""
+                    echo "公钥内容:"
+                    show_public_key "$ssh_key_path"
+                  fi
+                fi
               fi
               ;;
             4)
@@ -364,6 +370,8 @@ interactive_mode() {
               echo "=== 删除 Git 账号 ==="
               echo ""
               
+              list_accounts
+              
               local account_name
               echo -n "请输入要删除的账号名称: "
               read -r account_name || true
@@ -374,7 +382,16 @@ interactive_mode() {
               
               if [[ "$confirm" =~ ^[Yy] ]]; then
                 echo ""
-                delete_account "$account_name"
+                echo -n "是否同时删除关联的 SSH 密钥？(y/N): "
+                read -r delete_key || true
+                
+                local delete_ssh_key=false
+                if [[ "$delete_key" =~ ^[Yy] ]]; then
+                  delete_ssh_key=true
+                fi
+                
+                echo ""
+                delete_account "$account_name" "$delete_ssh_key"
               else
                 echo ""
                 echo "已取消删除"
@@ -526,6 +543,10 @@ interactive_mode() {
 }
 
 main() {
+  if check_migration_needed; then
+    run_migration
+  fi
+  
   if [[ $# -eq 0 ]]; then
     interactive_mode
     return

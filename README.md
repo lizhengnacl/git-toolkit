@@ -38,6 +38,19 @@ curl -fsSL https://raw.githubusercontent.com/lizhengnacl/git-toolkit/main/instal
 wget -qO- https://raw.githubusercontent.com/lizhengnacl/git-toolkit/main/install.sh | bash
 ```
 
+### 本地安装（如果已下载 install.sh）
+
+如果你已经将 `install.sh` 下载到本地，可以直接执行：
+
+```bash
+# 方式一：添加执行权限后运行
+chmod +x install.sh
+./install.sh
+
+# 方式二：直接用 bash 执行（无需添加执行权限）
+bash install.sh
+```
+
 ### 手动安装
 
 ```bash

@@ -140,20 +140,6 @@ switch_account() {
   log_info "账号切换成功"
 }
 
-delete_account() {
-  local account_name="$1"
-  local config_file="$ACCOUNTS_DIR/$account_name.conf"
-  
-  if [[ ! -f "$config_file" ]]; then
-    log_error "账号不存在: $account_name"
-    return 1
-  fi
-  
-  remove_ssh_config_for_account "$account_name"
-  rm "$config_file"
-  log_info "账号已删除: $account_name"
-}
-
 get_current_account() {
   local name=$(git_get_config "user.name" "global")
   local email=$(git_get_config "user.email" "global")
@@ -198,4 +184,94 @@ edit_account() {
   fi
   
   log_info "账号编辑成功: $account_name"
+}
+
+is_key_used_by_others() {
+  local exclude_account="$1"
+  local key_path="$2"
+  
+  if [[ ! -d "$ACCOUNTS_DIR" ]]; then
+    return 1
+  fi
+  
+  for account_file in "$ACCOUNTS_DIR"/*.conf; do
+    if [[ -f "$account_file" ]]; then
+      local account_name=$(basename "$account_file" .conf)
+      
+      if [[ "$account_name" == "$exclude_account" ]]; then
+        continue
+      fi
+      
+      while IFS= read -r line; do
+        if [[ "$line" =~ ^SSH_KEY_PATH=\"(.*)\"$ ]]; then
+          local cfg_key="${BASH_REMATCH[1]}"
+          if [[ "$cfg_key" == "$key_path" ]]; then
+            return 0
+          fi
+        elif [[ "$line" =~ ^DOMAIN_SSH_KEYS=\((.*)\)$ ]]; then
+          local mappings="${BASH_REMATCH[1]}"
+          local temp_str="$mappings"
+          while [[ "$temp_str" =~ \"([^\"]+)\" ]]; do
+            local mapping="${BASH_REMATCH[1]}"
+            local domain=""
+            local key=""
+            parse_domain_key_entry "$mapping" domain key
+            if [[ "$key" == "$key_path" ]]; then
+              return 0
+            fi
+            temp_str="${temp_str#*\"${BASH_REMATCH[1]}\"}"
+          done
+        fi
+      done < "$account_file"
+    fi
+  done
+  
+  return 1
+}
+
+show_public_key() {
+  local private_key="$1"
+  local public_key="${private_key}.pub"
+  
+  if [[ -f "$public_key" ]]; then
+    cat "$public_key"
+  fi
+}
+
+delete_account() {
+  local account_name="$1"
+  local delete_ssh_key="${2:-false}"
+  local config_file="$ACCOUNTS_DIR/$account_name.conf"
+  
+  if [[ ! -f "$config_file" ]]; then
+    log_error "账号不存在: $account_name"
+    return 1
+  fi
+  
+  local cfg_ssh_key=""
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^SSH_KEY_PATH=\"(.*)\"$ ]]; then
+      cfg_ssh_key="${BASH_REMATCH[1]}"
+    fi
+  done < "$config_file"
+  
+  remove_ssh_config_for_account "$account_name"
+  rm "$config_file"
+  
+  if [[ "$delete_ssh_key" == "true" ]] && [[ -n "$cfg_ssh_key" ]]; then
+    local private_key="$cfg_ssh_key"
+    local public_key="${private_key}.pub"
+    
+    if [[ -f "$private_key" ]]; then
+      rm -f "$private_key"
+      log_info "已删除私钥: $private_key"
+    fi
+    
+    if [[ -f "$public_key" ]]; then
+      rm -f "$public_key"
+      log_info "已删除公钥: $public_key"
+    fi
+  fi
+  
+  log_info "账号已删除: $account_name"
 }

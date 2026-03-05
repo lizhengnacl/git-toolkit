@@ -8,16 +8,31 @@ source "$SCRIPT_DIR/../constants.sh"
 source "$SCRIPT_DIR/../utils/logger.sh"
 source "$SCRIPT_DIR/prompt.sh"
 
+is_expert_mode() {
+  local expert_mode="${GIT_TOOLKIT_EXPERT_MODE:-}"
+  if [[ "$expert_mode" == "true" ]] || [[ "$expert_mode" == "TRUE" ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 show_main_menu() {
   echo ""
   echo "================================"
   echo "  Git Toolkit v$GIT_TOOLKIT_VERSION"
   echo "================================"
   echo "1. 初始化 Git 环境"
-  echo "2. SSH 密钥管理"
-  echo "3. Git 账号管理"
-  echo "4. Git Alias 管理"
-  echo "5. 查看帮助"
+  if is_expert_mode; then
+    echo "2. SSH 密钥管理"
+    echo "3. Git 账号管理"
+    echo "4. Git Alias 管理"
+    echo "5. 查看帮助"
+  else
+    echo "2. Git 账号管理"
+    echo "3. Git Alias 管理"
+    echo "4. 查看帮助"
+  fi
   echo "0. 退出"
   echo "================================"
 }

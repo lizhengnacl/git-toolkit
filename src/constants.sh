@@ -10,6 +10,13 @@ SSH_CONFIG_FILE="${SSH_CONFIG_FILE:-${HOME}/.ssh/config}"
 SSH_CONFIG_START_MARKER="# === git-toolkit managed start ==="
 SSH_CONFIG_END_MARKER="# === git-toolkit managed end ==="
 
+# 专家模式
+EXPERT_MODE_ENV_VAR="GIT_TOOLKIT_EXPERT_MODE"
+
+# 配置迁移
+MIGRATION_VERSION="5"
+MIGRATION_MARKER_FILE="${GIT_TOOLKIT_DIR}/.migration_v${MIGRATION_VERSION}"
+
 CD_HOOK_START_MARKER="# === git-toolkit auto-switch start ==="
 CD_HOOK_END_MARKER="# === git-toolkit auto-switch end ==="
 

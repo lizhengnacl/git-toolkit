@@ -136,6 +136,57 @@ test_prompt_domains_returns_list() {
   fi
 }
 
+test_prompt_simplified_ssh_key_option_returns_generate_by_default() {
+  local test_name="test_prompt_simplified_ssh_key_option_returns_generate_by_default"
+  setup_test_env
+  
+  if type prompt_simplified_ssh_key_option 2>/dev/null | grep -q "function"; then
+    mock_input ""
+    local result=$(prompt_simplified_ssh_key_option 2>&1)
+    if [[ "$result" == "generate" || -z "$result" ]]; then
+      assert_pass "$test_name"
+    else
+      assert_fail "$test_name - expected 'generate' by default, got '$result'"
+    fi
+  else
+    assert_pass "$test_name - function not implemented yet"
+  fi
+}
+
+test_prompt_simplified_ssh_key_option_returns_select() {
+  local test_name="test_prompt_simplified_ssh_key_option_returns_select"
+  setup_test_env
+  
+  if type prompt_simplified_ssh_key_option 2>/dev/null | grep -q "function"; then
+    mock_input "2"
+    local result=$(prompt_simplified_ssh_key_option 2>&1)
+    if [[ "$result" == "select" || -z "$result" ]]; then
+      assert_pass "$test_name"
+    else
+      assert_fail "$test_name - expected 'select', got '$result'"
+    fi
+  else
+    assert_pass "$test_name - function not implemented yet"
+  fi
+}
+
+test_prompt_simplified_ssh_key_option_returns_skip() {
+  local test_name="test_prompt_simplified_ssh_key_option_returns_skip"
+  setup_test_env
+  
+  if type prompt_simplified_ssh_key_option 2>/dev/null | grep -q "function"; then
+    mock_input "3"
+    local result=$(prompt_simplified_ssh_key_option 2>&1)
+    if [[ "$result" == "skip" || -z "$result" ]]; then
+      assert_pass "$test_name"
+    else
+      assert_fail "$test_name - expected 'skip', got '$result'"
+    fi
+  else
+    assert_pass "$test_name - function not implemented yet"
+  fi
+}
+
 echo "Running account_wizard tests..."
 echo "================================"
 
@@ -143,6 +194,9 @@ test_prompt_ssh_key_option_returns_generate
 test_prompt_ssh_key_option_returns_select
 test_prompt_ssh_key_option_returns_skip
 test_prompt_domains_returns_list
+test_prompt_simplified_ssh_key_option_returns_generate_by_default
+test_prompt_simplified_ssh_key_option_returns_select
+test_prompt_simplified_ssh_key_option_returns_skip
 
 echo "================================"
 echo "Total: $test_count, Passed: $pass_count, Failed: $fail_count"

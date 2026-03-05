@@ -229,10 +229,111 @@ test_edit_account_updates_config() {
   assert_file_contains "$test_name" "$config_file" "SSH_KEY_PATH=\"$HOME/.ssh/new_key\""
 }
 
+test_is_key_used_by_others_when_not_used() {
+  local test_name="test_is_key_used_by_others_when_not_used"
+  setup_test_env
+  
+  add_account "test1" "User 1" "user1@example.com" "$HOME/.ssh/key1" "github.com"
+  
+  if ! is_key_used_by_others "test1" "$HOME/.ssh/key1"; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_is_key_used_by_others_when_used_by_other() {
+  local test_name="test_is_key_used_by_others_when_used_by_other"
+  setup_test_env
+  
+  add_account "test1" "User 1" "user1@example.com" "$HOME/.ssh/shared_key" "github.com"
+  add_account "test2" "User 2" "user2@example.com" "$HOME/.ssh/shared_key" "gitlab.com"
+  
+  if is_key_used_by_others "test1" "$HOME/.ssh/shared_key"; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name"
+  fi
+}
+
+test_show_public_key_returns_content() {
+  local test_name="test_show_public_key_returns_content"
+  setup_test_env
+  
+  local test_key_dir="$TEST_TEMP_DIR/ssh"
+  mkdir -p "$test_key_dir"
+  local private_key="$test_key_dir/test_key"
+  local public_key="$test_key_dir/test_key.pub"
+  
+  cat > "$private_key" <<EOF
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACB0ZXN0a2V5dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleQAAAAKQAAAA
+WAAAAAtzc2gtZWQyNTUxOQAAACB0ZXN0a2V5dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdG
+tleQAAAAEAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQIDBAUGBwg=
+-----END OPENSSH PRIVATE KEY-----
+EOF
+  
+  local expected_public_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlc3RrZXl0ZXN0a2V5 test@example.com"
+  echo "$expected_public_key" > "$public_key"
+  
+  local result=$(show_public_key "$private_key")
+  if [[ "$result" == "$expected_public_key" ]]; then
+    assert_pass "$test_name"
+  else
+    assert_fail "$test_name - expected: '$expected_public_key', got: '$result'"
+  fi
+}
+
+test_delete_account_preserves_ssh_key_by_default() {
+  local test_name="test_delete_account_preserves_ssh_key_by_default"
+  setup_test_env
+  
+  local test_key_dir="$TEST_TEMP_DIR/ssh"
+  mkdir -p "$test_key_dir"
+  local private_key="$test_key_dir/test_key"
+  local public_key="$test_key_dir/test_key.pub"
+  
+  touch "$private_key"
+  touch "$public_key"
+  
+  add_account "test" "Test User" "test@example.com" "$private_key" "github.com"
+  
+  delete_account "test"
+  
+  assert_file_exists "$test_name" "$private_key"
+  assert_file_exists "$test_name" "$public_key"
+}
+
+test_delete_account_deletes_ssh_key_when_specified() {
+  local test_name="test_delete_account_deletes_ssh_key_when_specified"
+  setup_test_env
+  
+  local test_key_dir="$TEST_TEMP_DIR/ssh"
+  mkdir -p "$test_key_dir"
+  local private_key="$test_key_dir/test_key"
+  local public_key="$test_key_dir/test_key.pub"
+  
+  touch "$private_key"
+  touch "$public_key"
+  
+  add_account "test" "Test User" "test@example.com" "$private_key" "github.com"
+  
+  delete_account "test" "true"
+  
+  assert_file_not_exists "$test_name" "$private_key"
+  assert_file_not_exists "$test_name" "$public_key"
+}
+
 test_load_account_config_supports_old_format
 test_save_account_config_supports_domain_ssh_keys
 test_list_accounts_shows_default_key_and_mappings
 test_edit_account_updates_config
+test_is_key_used_by_others_when_not_used
+test_is_key_used_by_others_when_used_by_other
+test_show_public_key_returns_content
+test_delete_account_preserves_ssh_key_by_default
+test_delete_account_deletes_ssh_key_when_specified
 
 echo "================================"
 echo "Total: $test_count, Passed: $pass_count, Failed: $fail_count"
